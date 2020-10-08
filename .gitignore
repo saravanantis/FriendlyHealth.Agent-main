@@ -1,0 +1,23 @@
+#################
+#### Folders ####
+#################
+bin
+obj
+.vs
+
+#################
+##### Files #####
+#################
+*.user
+*.dbmdl
+*.jfm
+*.refactorlog
+*.test.html
+/.vs
+
+obj/
+bin/
+Logs/
+/OcrFormProcessing/wwwroot/
+
+
