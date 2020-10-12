@@ -36,7 +36,7 @@ namespace ppsha.Helper
         {
             try
             {
-
+                _logger.LogInformation($"Friendly OCRAPI URL is {baseURL}");
                 var signinResult = await userApiClient.UserLogin();
                 if (signinResult.Item2)
                 {
@@ -44,11 +44,13 @@ namespace ppsha.Helper
                     userId = signinResult.Item3;
                     AuthClient auth = new AuthClient();
                     String sessionId = auth.login(_mySettings.VPUsernName, _mySettings.VPPassword);
+                    _logger.LogInformation("VP and Friendly Sign In Successful");
                     TaskQueuesClient tasksClient = new TaskQueuesClient();
                     TaskQueueEntry entryInformation = tasksClient.getNextEntryInTaskQueue(sessionId, "INDEXING");
 
                     if (entryInformation != null)
                     {
+                        _logger.LogInformation("Queue Entry Info received: {0}", entryInformation.queueEntryId);
                         vp_webservice_documents.DocumentsClient documentsClient = new vp_webservice_documents.DocumentsClient();
                         vp_webservice_documents.document document = documentsClient.getDocument(sessionId, entryInformation.documentId);
                         vp_webservice_documents.document[] listDocuments = null;
@@ -64,7 +66,11 @@ namespace ppsha.Helper
                         }
                         else
                         {
-                            //Unrecognized content type
+                            tasksClient.setEntryProcessedFail(sessionId, entryInformation.queueEntryId, "Unsupported content type.");
+                            var message = String.Format("Unsupported contentType: {0} for entry id: {1}", document.contentType, entryInformation.queueEntryId);
+                            await tasksClient.setEntryProcessedFailAsync(sessionId, entryInformation.queueEntryId, message);
+                            _logger.LogInformation(message);
+                            return true;
                         }
                         var clientJson = new
                         {
@@ -72,16 +78,19 @@ namespace ppsha.Helper
                             Document = document,
                             DocumentsList = listDocuments
                         };
+                        _logger.LogInformation("Document Id is: {0} (Type: {1}, Total files: {2})", document.id, document.contentType, listDocuments.Length);
                         var clientJsonStr = JsonConvert.SerializeObject(clientJson);
 
                         var unProcessedClaimIds = await claimApiClient.GetUnprocessedClaimIds(tokenString);
                         var processedClaimIds = await claimApiClient.GetProcessedClaimIds(tokenString);
                         if (unProcessedClaimIds.Count > 0 && unProcessedClaimIds != null)
                         {
+                            _logger.LogInformation("Processing {0} unprocessed Claim IDs in Friendly", unProcessedClaimIds.Count);
                             var outputRes = UnProcessedClaimPostToOcrApi(unProcessedClaimIds);
                         }
                         if (processedClaimIds.Count > 0 && processedClaimIds != null)
                         {
+                            _logger.LogInformation("Posting {0} processed Claim IDs", processedClaimIds.Count);
                             var outputRes = ProcessedClaimPostToVP(processedClaimIds, sessionId);
                         }
                         var upCount = unProcessedClaimIds?.FindAll(x => x.DocumentQueueEntryId == entryInformation.queueEntryId);
@@ -116,6 +125,7 @@ namespace ppsha.Helper
                                     if (claimResult.ClaimId != null)
                                     {
                                         string claimId = string.Join(",", claimResult.ClaimId.ToString());
+                                        _logger.LogInformation($"Claim Created: {claimId}");
                                         claimIds.Add(claimId);
                                     }
                                 }
@@ -126,24 +136,35 @@ namespace ppsha.Helper
                                 claimRequestModel.Debug = false;
                                 claimRequestModel.ProcessAll = true;
                                 var processResult = await claimApiClient.ClaimOCRAsyncApiClientForMultiplePdf(claimRequestModel, tokenString);
+                                _logger.LogInformation($"Processing started on claims: {String.Join(", ", claimRequestModel.ClaimIds)}   Status {processResult.Status}");
                             }
                         }
                     }
                     else
                     {
-                        _logger.LogError("Null Entry Information from VP.");
+                        var unProcessedClaimIds = await claimApiClient.GetUnprocessedClaimIds(tokenString);
+                        var processedClaimIds = await claimApiClient.GetProcessedClaimIds(tokenString);
+                        if (unProcessedClaimIds.Count > 0 && unProcessedClaimIds != null)
+                        {
+                            var outputRes = UnProcessedClaimPostToOcrApi(unProcessedClaimIds);
+                        }
+                        if (processedClaimIds.Count > 0 && processedClaimIds != null)
+                        {
+                            var outputRes = ProcessedClaimPostToVP(processedClaimIds, sessionId);
+                        }
+                        _logger.LogInformation("Null Entry Information from VP.");
                     }
                     return true;
                 }
                 else
                 {
-                    _logger.LogError("");
+                    _logger.LogInformation("OCR SignIn failed with error: {0}", signinResult.Item4);
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error Occured in Textract Service", ex.Message.ToString(), ex.StackTrace.ToString());
+                _logger.LogInformation("Error Occured in Textract Service", ex.Message.ToString(), ex.StackTrace.ToString());
                 return false;
             }
         }

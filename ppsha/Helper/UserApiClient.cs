@@ -21,14 +21,13 @@ namespace ppsha.Helper
             BaseURL = baseURL;
             MySettings = myConstants;
         }
-        public async Task<(string, bool, int)> UserLogin()
+        public async Task<(string, bool, int, string)> UserLogin()
         {
             try
             {
                 ResultModel result = await UserSignIn(MySettings.UserEmail, MySettings.UserPassword);
                 if (result.Status && result.ResetPasswordStatus == false)
                 {
-                    var environment = Environment.GetEnvironmentVariable(MySettings.EnvironmentName).ToLower();
                     var userid = await CreateCognitoUserApiClientAsync(MySettings.UserEmail, false);                    
 
                     string token = string.IsNullOrEmpty(result.TokenString) ? GenerateToken(MySettings.UserEmail) : result.TokenString;
@@ -36,16 +35,16 @@ namespace ppsha.Helper
                     //SessionObj.TokenString = !string.IsNullOrEmpty(token) ? token : string.Empty;
                     //SessionObj.UserId = userid;
 
-                    return (TokenString, result.Status, userid);
+                    return (TokenString, result.Status, userid, result.ErrorMessage);
                 }
                 else
                 {
-                    return ("", false, 0);
+                    return ("", false, 0, result.ErrorMessage);
                 }
             }
             catch (Exception ex)
             {
-                return ("", false, 0);
+                return ("", false, 0, $"{ex.Message} {Environment.NewLine} {ex.StackTrace} ");
             }
         }
         public string GenerateToken(string username)

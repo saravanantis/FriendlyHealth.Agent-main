@@ -26,7 +26,7 @@ namespace ppsha.Services
                 _logger.LogInformation("Running PPSHA Service.");
                 ServiceBusiness _service = new ServiceBusiness(_logger);
                 bool result = await _service.CreateClaim();
-                await Task.Delay(100000 * timeInterval * 1, stoppingToken);
+                await Task.Delay(10000 * timeInterval * 1, stoppingToken);
             }
         }
     }
